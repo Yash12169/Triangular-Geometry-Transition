@@ -97,81 +97,101 @@ document.addEventListener("DOMContentLoaded",()=>{
 
      
 
-     function drawGrid(scrollProgress =0)
-     {
-        if(animationFrameId){
+     function drawGrid(scrollProgress = 0) {
+        if (animationFrameId) {
             cancelAnimationFrame(animationFrameId);
         }
-
-        outlineCtx.clearRect(0,0,outlineCanvas.width,outlineCanvas.height);
-        fillCtx.clearRect(0,0,fillCanvas.width,fillCanvas.height)
-        const animationProgress = scrollProgress <= 0.65 ? 0 :(scrollProgress - 0.65)/0.35;
+    
+        outlineCtx.clearRect(0, 0, outlineCanvas.width, outlineCanvas.height);
+        fillCtx.clearRect(0, 0, fillCanvas.width, fillCanvas.height);
+        
+        const animationProgress = scrollProgress <= 0.65 ? 0 : (scrollProgress - 0.65) / 0.35;
         let needsUpdate = false;
-        const  animationSpeed = 0.15;
-
-
-        triangleStates.forEach((state,key)=>{
-            if(state.scale < 1){
-                const x = state.col *(triangleSize*0.5)+triangleSize/2+canvasXPositions;
-                const y = state.row *triangleSize+triangleSize/2;
-                const flipped = (state.row + state.col) %2 !==0;
-                drawTriangle(outlineCtx,x,y,0,flipped);
+        const animationSpeed = 0.15;
+    
+        // Function to check if triangle is in visible area with buffer
+        const isVisible = (x, y) => {
+            const buffer = triangleSize * 2;
+            return x >= -buffer && 
+                   x <= outlineCanvas.width + buffer && 
+                   y >= -buffer && 
+                   y <= outlineCanvas.height + buffer;
+        };
+    
+        triangleStates.forEach((state, key) => {
+            const x = state.col * (triangleSize * 0.5) + triangleSize/2 + canvasXPositions;
+            const y = state.row * triangleSize + triangleSize/2;
+    
+            if (isVisible(x, y)) {
+                if (state.scale < 1) {
+                    const flipped = (state.row + state.col) % 2 !== 0;
+                    drawTriangle(outlineCtx, x, y, 0, flipped);
+                }
             }
         });
-
-        triangleStates.forEach((state,key)=>{
-            const shouldBeVisible = state.order <= animationProgress
-            const targetScale = shouldBeVisible ? 1 : 0;
-            const newScale = state.scale + (targetScale-state.scale)*animationSpeed;
-
-            if(Math.abs(newScale - state.scale)>0.001){
-                state.scale = newScale
-                needsUpdate = true
-            }
-
-            if(state.scale >= SCALE_THRESHOLD){
-                const x = state.col* (triangleSize*0.5) + triangleSize/2 +canvasXPositions
-                const y = state.row * triangleSize +triangleSize/2;
-                const flipped = (state.row +state.col) %2 !==0;
-                drawTriangle(fillCtx,x,y,state.scale,flipped);
+    
+        triangleStates.forEach((state, key) => {
+            const x = state.col * (triangleSize * 0.5) + triangleSize/2 + canvasXPositions;
+            const y = state.row * triangleSize + triangleSize/2;
+    
+            if (isVisible(x, y)) {
+                const shouldBeVisible = state.order <= animationProgress;
+                const targetScale = shouldBeVisible ? 1 : 0;
+                const newScale = state.scale + (targetScale - state.scale) * animationSpeed;
+    
+                if (Math.abs(newScale - state.scale) > 0.001) {
+                    state.scale = newScale;
+                    needsUpdate = true;
+                }
+    
+                if (state.scale >= SCALE_THRESHOLD) {
+                    const flipped = (state.row + state.col) % 2 !== 0;
+                    drawTriangle(fillCtx, x, y, state.scale, flipped);
+                }
             }
         });
-
-        if(needsUpdate){
-            animationFrameId = requestAnimationFrame(()=>drawGrid(scrollProgress));
+    
+        if (needsUpdate) {
+            animationFrameId = requestAnimationFrame(() => drawGrid(scrollProgress));
         }
     }
 
 
-    function initializeTriangles(){
-        const cols = Math.ceil(window.innerWidth/(triangleSize*0.5));
-        const rows = Math.ceil(window.innerHeight/(triangleSize*0.5));
-        const totalTriangles = rows*cols;
-
+    function initializeTriangles() {
+        // Add extra columns on both sides
+        const extraColumns = 4; // Increased buffer columns
+        const cols = Math.ceil(window.innerWidth / (triangleSize * 0.5)) + extraColumns;
+        const rows = Math.ceil(window.innerHeight / triangleSize) + 1;
+        const totalTriangles = rows * cols;
+    
         const positions = [];
-        for(let r =0;r<rows;r++){
-            for(let c =0;c<cols;c++){
-                positions.push({row:r,col:c,key:`${r}-${c}`});
+        for (let r = 0; r < rows; r++) {
+            for (let c = -extraColumns/2; c < cols - extraColumns/2; c++) { // Start grid from negative columns
+                positions.push({
+                    row: r,
+                    col: c,
+                    key: `${r}-${c}`
+                });
             }
         }
-
-
-        for(let i = positions.length-1 ;i>0;i--){
-            const j = Math.floor(Math.random()*(i+1));
-            [positions[i],positions[j]] = [positions[j],positions[i]];
+    
+        // Randomize positions
+        for (let i = positions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [positions[i], positions[j]] = [positions[j], positions[i]];
         }
-
-        positions.forEach((pos,index)=>{
-            triangleStates.set(pos.key,{
-                order: index/totalTriangles,
-                scale:0,
+    
+        triangleStates.clear();
+        positions.forEach((pos, index) => {
+            triangleStates.set(pos.key, {
+                order: index / totalTriangles,
+                scale: 0,
                 row: pos.row,
-                col: pos.col,
-
+                col: pos.col
             });
-
         });
     }
+    
 
 
     initializeTriangles();
@@ -186,20 +206,22 @@ document.addEventListener("DOMContentLoaded",()=>{
 
     })
          
-     ScrollTrigger.create({
-        trigger: stickySection,
+    ScrollTrigger.create({
+        trigger: stickySection[0], // Be specific about which section to trigger
         start: "top top",
         end: `+=${stickyHeight}px`,
-        pin:true,
-        ouUpdate: (self)=>{
-            canvasXPositions = -self.progress*200;
-            drawGrid(self.progress)
-
+        pin: true,
+        onUpdate: (self) => {  // Fixed typo from 'ouUpdate' to 'onUpdate'
+            canvasXPositions = -self.progress * 200;
+            drawGrid(self.progress);
+    
             const cards = document.querySelector(".cards");
-            const progress =Math.min(self.progress/0.654,1);
-            gsap.set(cards,{
-                x:-progress*window.innerWidth*2,
-            })
-        }
-     })
+            // Adjusted the progress calculation and translation distance
+            const progress = Math.min(self.progress, 1);
+            gsap.set(cards, {
+                x: -progress * (cards.offsetWidth - window.innerWidth),  // This ensures full width scroll
+            });
+        },
+        scrub: 1 // Added smooth scrolling effect
+    });
 })  
